@@ -501,7 +501,7 @@ export function evaluateCardLoss(mutator: string | null): void {
 }
 
 export interface RunCompleteContext {
-  mode: 'DAILY' | 'FULL' | 'CATEGORY' | 'DEBUG' | 'TUTORIAL';
+  mode: 'DAILY' | 'FULL' | 'CATEGORY' | 'DEBUG' | 'TUTORIAL' | 'CAMPAIGN_LESSON' | 'CAMPAIGN_REMIX' | 'SRS_REVIEW';
   totalCards: number;
   perfectCount: number;
   failCount: number;

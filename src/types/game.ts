@@ -5,6 +5,8 @@ export interface MicrogameStage {
   engine: EngineType;
   timeLimitMs: number;
   hint?: string;
+  hintNudge?: string;
+  hintSolution?: string;
   payload: any;
 }
 
@@ -19,6 +21,8 @@ export interface MicrogamePayload {
   engine?: EngineType;
   timeLimitMs?: number;
   hint?: string;
+  hintNudge?: string;
+  hintSolution?: string;
   payload?: any;
   
   stages?: MicrogameStage[];

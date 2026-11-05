@@ -16,6 +16,8 @@ interface GlobalHeaderProps {
   onOpenProfile: () => void;
   onOpenAuth: () => void;
   onOpenBugReport: () => void;
+  onOpenStudio?: () => void;
+  onOpenCampaign?: () => void;
   onGoHome: () => void;
 }
 
@@ -29,6 +31,8 @@ function GlobalHeader({
   onOpenProfile,
   onOpenAuth,
   onOpenBugReport,
+  onOpenStudio,
+  onOpenCampaign,
   onGoHome
 }: GlobalHeaderProps) {
   const { user } = useAuth();
@@ -61,6 +65,22 @@ function GlobalHeader({
           >
             Home
           </button>
+          {onOpenCampaign && (
+            <button 
+              onClick={onOpenCampaign}
+              className="px-3 py-1.5 rounded-lg hover:text-cyan-300 hover:bg-cyan-950/30 transition-all flex items-center gap-1 text-cyan-400"
+            >
+              <span>🥋</span> Campaign
+            </button>
+          )}
+          {onOpenStudio && (
+            <button 
+              onClick={onOpenStudio}
+              className="px-3 py-1.5 rounded-lg hover:text-purple-300 hover:bg-purple-950/30 transition-all flex items-center gap-1 text-purple-400"
+            >
+              <span>🤖</span> AI Studio
+            </button>
+          )}
           <button 
             onClick={onOpenLeaderboard}
             className="px-3 py-1.5 rounded-lg hover:text-yellow-400 hover:bg-yellow-950/20 transition-all flex items-center gap-1"

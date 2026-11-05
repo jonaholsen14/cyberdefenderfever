@@ -14,14 +14,20 @@ import GlobalHeader from './GlobalHeader';
 import LeaderboardModal from './LeaderboardModal';
 import AuthModal from './AuthModal';
 import BugReportModal from './BugReportModal';
+import CampaignModal from './CampaignModal';
+import AiDeckStudioModal from './AiDeckStudioModal';
 import { Achievement, OvertakeEvent, PlayerStats } from '../types/achievement';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { getPlayerStats, evaluateCardWin, evaluateCardLoss, evaluateRunComplete, setAchievementStorageAdapter } from '../utils/achievementManager';
 import { FirestoreAdapter } from '../utils/firestoreAdapter';
 import { useAuth } from '../context/AuthContext';
+import { CampaignChapter, MedalType } from '../types/campaign';
+import { CAMPAIGN_CHAPTERS, getCampaignProgress, markLessonCompleted, markRemixCompleted } from '../data/campaignChapters';
+import { getSRSState, recordCardReview, getDueCardIds, getDueCount, getTotalGraduatedCount, getCustomDecks, graduateCards } from '../utils/srsManager';
 
-type Phase = 'MAIN_MENU' | 'VERB_SLAM' | 'INTERACTIVE' | 'RESOLUTION' | 'EDUCATIONAL_REVIEW' | 'INTERMISSION' | 'VICTORY';
+type Phase = 'MAIN_MENU' | 'VERB_SLAM' | 'INTERACTIVE' | 'RESOLUTION' | 'EDUCATIONAL_REVIEW' | 'INTERMISSION' | 'VICTORY' | 'DEFEAT';
 type MenuTab = 'HOME' | 'FOCUSED';
+type GameMode = 'DAILY' | 'FULL' | 'CATEGORY' | 'DEBUG' | 'TUTORIAL' | 'CAMPAIGN_LESSON' | 'CAMPAIGN_REMIX' | 'SRS_REVIEW';
 
 // Seeded RNG generator
 function getSeededRandom(seed: number) {
@@ -113,8 +119,33 @@ export default function GameManager() {
   const [overtakeEvent, setOvertakeEvent] = useState<OvertakeEvent | null>(null);
   const [floatingFP, setFloatingFP] = useState<number | null>(null);
   const [isLastClearPerfect, setIsLastClearPerfect] = useState(false);
-  const [currentMode, setCurrentMode] = useState<'DAILY' | 'FULL' | 'CATEGORY' | 'DEBUG' | 'TUTORIAL'>('FULL');
+  const [currentMode, setCurrentMode] = useState<GameMode>('FULL');
   const [isCopied, setIsCopied] = useState(false);
+
+  // Campaign & Spaced Repetition (SRS) State
+  const [isCampaignOpen, setIsCampaignOpen] = useState(false);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [activeChapter, setActiveChapter] = useState<CampaignChapter | null>(null);
+  const [activeLessonCardId, setActiveLessonCardId] = useState<string | null>(null);
+  const [remixLives, setRemixLives] = useState(3);
+  const [remixLostLives, setRemixLostLives] = useState(0);
+  const [remixEarnedMedal, setRemixEarnedMedal] = useState<MedalType | null>(null);
+  const [unlockedNextChapterId, setUnlockedNextChapterId] = useState<string | null>(null);
+  const [dueCount, setDueCount] = useState<number>(0);
+  const [graduatedCount, setGraduatedCount] = useState<number>(0);
+  const [hintTier, setHintTier] = useState<0 | 1 | 2>(0);
+  const [usedHintThisCard, setUsedHintThisCard] = useState<boolean>(false);
+  const [remixFailed, setRemixFailed] = useState(false);
+
+  // Refresh SRS Counts
+  const refreshSRSCounts = () => {
+    setDueCount(getDueCount());
+    setGraduatedCount(getTotalGraduatedCount());
+  };
+
+  useEffect(() => {
+    refreshSRSCounts();
+  }, []);
 
   // Sync auth state with storage adapter
   useEffect(() => {
@@ -210,6 +241,132 @@ export default function GameManager() {
     setQueueIndex(0);
     setStageIndex(0);
     setResult(null);
+    setHintTier(0);
+    setUsedHintThisCard(false);
+    setRemixFailed(false);
+    setPhase('VERB_SLAM');
+  };
+
+  const triggerHint = () => {
+    setUsedHintThisCard(true);
+    setHintTier((prev) => (prev === 0 ? 1 : 2));
+    if (currentMode === 'CAMPAIGN_LESSON') {
+      setTimeRemaining((prev) => Math.max(prev, 45000));
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'h' || e.key === 'H') && phase === 'INTERACTIVE' && currentMicrogame.id !== 'tutorial-briefing') {
+        triggerHint();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [phase, currentMicrogame]);
+
+  const startLesson = (chapter: CampaignChapter, cardId: string) => {
+    setActiveChapter(chapter);
+    setActiveLessonCardId(cardId);
+    setCurrentMode('CAMPAIGN_LESSON');
+    setMutator(null);
+    setMutatorRng(null);
+    setForcedMutator(undefined);
+
+    const customDecks = getCustomDecks();
+    const allCards = [...MICROGAME_QUEUE, ...customDecks.flatMap(d => d.cards)];
+    const raw = allCards.find(c => c.id === cardId) || MICROGAME_QUEUE[0];
+    const hydrated = hydrateGame(raw, Math.random);
+    
+    // Generous time in lesson mode (60s)
+    if (hydrated.stages) {
+      hydrated.stages.forEach(s => s.timeLimitMs = Math.max(s.timeLimitMs, 60000));
+    } else {
+      hydrated.timeLimitMs = Math.max(hydrated.timeLimitMs || 15000, 60000);
+    }
+
+    setSessionQueue([hydrated]);
+    setUnsolvedIds([hydrated.id]);
+    setElapsedTime(0);
+    setAttempts([]);
+    setQueueIndex(0);
+    setStageIndex(0);
+    setResult(null);
+    setHintTier(0);
+    setUsedHintThisCard(false);
+    setRemixFailed(false);
+    setPhase('VERB_SLAM');
+  };
+
+  const startRemix = (chapter: CampaignChapter) => {
+    setActiveChapter(chapter);
+    setCurrentMode('CAMPAIGN_REMIX');
+    setRemixLives(chapter.remixConfig.lives || 3);
+    setRemixLostLives(0);
+    setRemixEarnedMedal(null);
+    setUnlockedNextChapterId(null);
+    setMutatorRng(null);
+    setForcedMutator(undefined);
+
+    const customDecks = getCustomDecks();
+    const allCards = [...MICROGAME_QUEUE, ...customDecks.flatMap(d => d.cards)];
+    const chapterCards = chapter.cardIds.map(id => allCards.find(c => c.id === id)).filter(Boolean) as MicrogamePayload[];
+    
+    const rounds = chapter.remixConfig.rounds || 5;
+    let pool: MicrogamePayload[] = [];
+    while (pool.length < rounds) {
+      pool.push(...shuffleDeck([...chapterCards], Math.random));
+    }
+    const q = pool.slice(0, rounds).map(c => hydrateGame(c, Math.random));
+
+    setSessionQueue(q);
+    setUnsolvedIds(q.map(c => c.id));
+    setElapsedTime(0);
+    setAttempts([]);
+    setQueueIndex(0);
+    setStageIndex(0);
+    setResult(null);
+    setHintTier(0);
+    setUsedHintThisCard(false);
+    setRemixFailed(false);
+    setPhase('VERB_SLAM');
+  };
+
+  const startSRSReview = () => {
+    const dueIds = getDueCardIds();
+    const customDecks = getCustomDecks();
+    const allCards = [...MICROGAME_QUEUE, ...customDecks.flatMap(d => d.cards)];
+    
+    let targetCards: MicrogamePayload[] = [];
+    if (dueIds.length > 0) {
+      targetCards = dueIds.map(id => allCards.find(c => c.id === id)).filter(Boolean) as MicrogamePayload[];
+    } else {
+      // Cram Session: use graduated cards or Chapter 1
+      const state = getSRSState();
+      const gradIds = Object.keys(state.cards);
+      if (gradIds.length > 0) {
+        targetCards = gradIds.map(id => allCards.find(c => c.id === id)).filter(Boolean) as MicrogamePayload[];
+      } else {
+        graduateCards(CAMPAIGN_CHAPTERS[0].cardIds);
+        targetCards = CAMPAIGN_CHAPTERS[0].cardIds.map(id => allCards.find(c => c.id === id)).filter(Boolean) as MicrogamePayload[];
+      }
+    }
+
+    setCurrentMode('SRS_REVIEW');
+    setMutatorRng(null);
+    setForcedMutator(undefined);
+    const q = shuffleDeck(targetCards, Math.random).slice(0, 10).map(c => hydrateGame(c, Math.random));
+
+    setSessionQueue(q);
+    setUnsolvedIds(q.map(c => c.id));
+    setElapsedTime(0);
+    setAttempts([]);
+    setQueueIndex(0);
+    setStageIndex(0);
+    setResult(null);
+    setHintTier(0);
+    setUsedHintThisCard(false);
+    setRemixFailed(false);
     setPhase('VERB_SLAM');
   };
 
@@ -235,6 +392,10 @@ export default function GameManager() {
     } else if (phase === 'RESOLUTION') {
       timer = setTimeout(() => {
         if (result === 'LOSE') {
+          if (currentMode === 'CAMPAIGN_REMIX' && remixFailed) {
+            setPhase('DEFEAT');
+            return;
+          }
           setPhase('EDUCATIONAL_REVIEW');
         } else {
           const nextUnsolved = unsolvedIds.filter(id => id !== currentMicrogame.id);
@@ -243,6 +404,34 @@ export default function GameManager() {
           if (nextUnsolved.length === 0) {
             if (currentMode === 'TUTORIAL') {
               setPhase('MAIN_MENU');
+              return;
+            }
+            if (currentMode === 'CAMPAIGN_LESSON') {
+              setPhase('VICTORY');
+              return;
+            }
+            if (currentMode === 'CAMPAIGN_REMIX' && activeChapter) {
+              let medal: MedalType = 'BRONZE';
+              if (remixLostLives === 0) {
+                medal = attempts.filter(a => a.includes('PERFECT')).length >= 2 ? 'GOLD' : 'SILVER';
+              }
+              setRemixEarnedMedal(medal);
+              const { nextChapterUnlocked } = markRemixCompleted(
+                activeChapter.id,
+                medal,
+                playerStats.feverPoints,
+                activeChapter.cardIds
+              );
+              if (nextChapterUnlocked) {
+                setUnlockedNextChapterId(nextChapterUnlocked);
+              }
+              refreshSRSCounts();
+              setPhase('VICTORY');
+              return;
+            }
+            if (currentMode === 'SRS_REVIEW') {
+              refreshSRSCounts();
+              setPhase('VICTORY');
               return;
             }
             const { newlyUnlocked, bonusFP, overtake } = evaluateRunComplete({
@@ -279,6 +468,8 @@ export default function GameManager() {
         }
         
         setStageIndex(0);
+        setHintTier(0);
+        setUsedHintThisCard(false);
 
         if (forcedMutator !== undefined) {
           setMutator(forcedMutator);
@@ -370,6 +561,13 @@ export default function GameManager() {
       setAchievementQueue(prev => [...prev, ...newlyUnlocked]);
     }
     setPlayerStats(getPlayerStats());
+
+    if (currentMode === 'SRS_REVIEW') {
+      recordCardReview(currentMicrogame.id, true, usedHintThisCard);
+      refreshSRSCounts();
+    } else if (currentMode === 'CAMPAIGN_LESSON' && activeChapter) {
+      markLessonCompleted(activeChapter.id, currentMicrogame.id);
+    }
   };
 
   const handleLose = (reason: string) => {
@@ -379,6 +577,18 @@ export default function GameManager() {
     setResult('LOSE');
     setPhase('RESOLUTION');
     evaluateCardLoss(mutator);
+
+    if (currentMode === 'SRS_REVIEW') {
+      recordCardReview(currentMicrogame.id, false, usedHintThisCard);
+      refreshSRSCounts();
+    } else if (currentMode === 'CAMPAIGN_REMIX') {
+      const nextLives = Math.max(0, remixLives - 1);
+      setRemixLives(nextLives);
+      setRemixLostLives(prev => prev + 1);
+      if (nextLives === 0) {
+        setRemixFailed(true);
+      }
+    }
   };
 
   const renderEngine = () => {
@@ -485,56 +695,139 @@ export default function GameManager() {
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenBugReport={() => setIsBugReportOpen(true)}
+        onOpenCampaign={() => setIsCampaignOpen(true)}
+        onOpenStudio={() => setIsStudioOpen(true)}
         onGoHome={() => {
           setPhase('MAIN_MENU');
           setMenuTab('HOME');
+          refreshSRSCounts();
         }}
       />
       
       {phase === 'MAIN_MENU' && (
-        <div className="flex flex-col items-center justify-center z-50 text-white w-full max-w-lg bg-gray-900 border-2 border-gray-700 p-8 rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-          <h1 className="text-4xl md:text-5xl font-black mb-8 text-green-500 text-center uppercase tracking-widest">
-            Cyber Defender Fever
-          </h1>
+        <div className="flex flex-col items-center justify-center z-50 text-white w-full max-w-3xl bg-gray-900/95 border-2 border-cyan-500/30 p-6 sm:p-8 rounded-2xl shadow-[0_0_35px_rgba(6,182,212,0.15)] backdrop-blur-md">
+          <div className="text-center mb-6">
+            <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-300 to-blue-500 uppercase tracking-widest">
+              Cyber Defender Fever
+            </h1>
+            <p className="text-xs sm:text-sm text-cyan-400/80 font-mono mt-1">CCDC Incident Response Simulation & Training Engine</p>
+          </div>
           
           {menuTab === 'HOME' && (
             <div className="w-full flex flex-col gap-4 font-sans">
               
-              <div className="relative w-full cursor-pointer transition-all hover:scale-[1.02] group" onClick={() => startRun('DAILY')}>
-                {/* Outer Glow Mask: A solid, pre-clipped spinning rainbow block that is blurred */}
-                <div className="absolute -inset-[2px] blur-xl opacity-70 group-hover:opacity-100 transition-opacity">
-                  <div className="relative w-full h-full rounded-2xl overflow-hidden">
-                    <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,red,yellow,green,cyan,blue,magenta,red)] animate-[spin_4s_linear_infinite]" />
-                  </div>
-                </div>
+              {/* Top 3 Core Game Modes Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                 
-                {/* Inner Button */}
-                <div className="relative p-[3px] rounded-2xl overflow-hidden w-full z-10">
+                {/* 1. STORY CAMPAIGN (DOJO) */}
+                <div 
+                  onClick={() => setIsCampaignOpen(true)}
+                  className="p-5 rounded-2xl bg-gradient-to-b from-cyan-950/40 to-blue-950/30 border border-cyan-500/40 hover:border-cyan-400 hover:scale-[1.02] cursor-pointer transition-all flex flex-col justify-between shadow-lg shadow-cyan-950/50 group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🥋</span>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                        RHYTHM CAMPAIGN
+                      </span>
+                    </div>
+                    <h3 className="font-black text-lg text-white tracking-wide group-hover:text-cyan-300 transition-colors">
+                      Story Mode
+                    </h3>
+                    <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">
+                      Guided lessons, two-tier hints, and 3-strike Chapter Remix tests with medals.
+                    </p>
+                  </div>
+                  <button className="mt-4 w-full py-2 bg-cyan-600 group-hover:bg-cyan-500 text-white font-bold text-xs rounded-lg uppercase tracking-wider transition-all">
+                    Enter Dojo →
+                  </button>
+                </div>
+
+                {/* 2. DAILY CHALLENGE (RAINBOW CARD) */}
+                <div 
+                  onClick={() => startRun('DAILY')}
+                  className="relative cursor-pointer transition-all hover:scale-[1.02] group rounded-2xl p-[2px] overflow-hidden flex flex-col justify-between shadow-lg"
+                >
                   <div className="absolute inset-[-150%] bg-[conic-gradient(from_0deg,red,yellow,green,cyan,blue,magenta,red)] animate-[spin_4s_linear_infinite]" />
-                  <div className="relative w-full py-10 bg-black/95 rounded-[13px] flex items-center justify-center font-black text-5xl text-white uppercase tracking-widest backdrop-blur-md">
-                    Daily
+                  <div className="relative w-full h-full p-5 bg-black/95 rounded-[14px] flex flex-col justify-between backdrop-blur-md">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-2xl group-hover:scale-110 transition-transform">⚡</span>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/40">
+                          DAILY SEED
+                        </span>
+                      </div>
+                      <h3 className="font-black text-lg text-white uppercase tracking-wider group-hover:text-yellow-400 transition-colors">
+                        Daily Incident
+                      </h3>
+                      <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">
+                        Competitive seeded 12-card sprint. One chance daily to climb the leaderboard!
+                      </p>
+                    </div>
+                    <button className="mt-4 w-full py-2 bg-gradient-to-r from-orange-600 to-red-600 group-hover:from-orange-500 group-hover:to-red-500 text-white font-bold text-xs rounded-lg uppercase tracking-wider transition-all">
+                      Play Daily 🔥
+                    </button>
                   </div>
                 </div>
+
+                {/* 3. DAILY SRS REVIEW */}
+                <div 
+                  onClick={startSRSReview}
+                  className="p-5 rounded-2xl bg-gradient-to-b from-emerald-950/40 to-teal-950/30 border border-emerald-500/40 hover:border-emerald-400 hover:scale-[1.02] cursor-pointer transition-all flex flex-col justify-between shadow-lg shadow-emerald-950/50 group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-2xl group-hover:scale-110 transition-transform">🧠</span>
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                        dueCount > 0 
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 animate-pulse' 
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      }`}>
+                        {dueCount > 0 ? `${dueCount} DUE TODAY` : 'ALL CAUGHT UP'}
+                      </span>
+                    </div>
+                    <h3 className="font-black text-lg text-white tracking-wide group-hover:text-emerald-300 transition-colors">
+                      SRS Review
+                    </h3>
+                    <p className="text-xs text-gray-300 mt-1.5 leading-relaxed">
+                      Modified SM-2 interval scheduler. Review graduated cards to cement long-term recall.
+                    </p>
+                  </div>
+                  <button className="mt-4 w-full py-2 bg-emerald-600 group-hover:bg-emerald-500 text-white font-bold text-xs rounded-lg uppercase tracking-wider transition-all">
+                    {dueCount > 0 ? `Review (${dueCount}) →` : 'Cram Practice →'}
+                  </button>
+                </div>
+
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 font-sans">
-                <button onClick={() => startRun('FULL')} className="w-full py-5 bg-green-600 hover:bg-green-500 font-bold text-sm rounded-lg shadow-lg transition-all border border-green-400 flex flex-col items-center justify-center tracking-wider">
-                  FULL DECK
+              {/* Secondary Navigation Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-2">
+                <button 
+                  onClick={() => startRun('FULL')} 
+                  className="py-3 bg-gray-800/90 hover:bg-gray-700 font-bold text-xs rounded-xl shadow transition-all border border-gray-700 hover:border-gray-500 flex items-center justify-center gap-1.5 text-gray-200"
+                >
+                  <span>🎮</span> Full Deck
                 </button>
-                <button onClick={() => setMenuTab('FOCUSED')} className="w-full py-5 bg-blue-600 hover:bg-blue-500 font-bold text-sm rounded-lg shadow-lg transition-all border border-blue-400 flex flex-col items-center justify-center tracking-wider">
-                  FOCUSED
+                <button 
+                  onClick={() => setMenuTab('FOCUSED')} 
+                  className="py-3 bg-gray-800/90 hover:bg-gray-700 font-bold text-xs rounded-xl shadow transition-all border border-gray-700 hover:border-gray-500 flex items-center justify-center gap-1.5 text-gray-200"
+                >
+                  <span>🎯</span> Categories
                 </button>
-                <button onClick={() => setIsProfileOpen(true)} className="w-full py-5 bg-gray-700 hover:bg-gray-600 font-bold text-sm rounded-lg shadow-lg transition-all border border-gray-500 flex flex-col items-center justify-center opacity-80 tracking-wider">
-                  PROFILE
+                <button 
+                  onClick={() => setIsStudioOpen(true)} 
+                  className="py-3 bg-purple-950/40 hover:bg-purple-900/60 font-bold text-xs rounded-xl shadow transition-all border border-purple-500/40 hover:border-purple-400 flex items-center justify-center gap-1.5 text-purple-300"
+                >
+                  <span>🤖</span> AI Studio
+                </button>
+                <button 
+                  onClick={() => startRun('TUTORIAL')} 
+                  className="py-3 bg-gray-800/90 hover:bg-gray-700 font-bold text-xs rounded-xl shadow transition-all border border-gray-700 hover:border-emerald-500/50 flex items-center justify-center gap-1.5 text-emerald-400"
+                >
+                  <span>💡</span> Briefing
                 </button>
               </div>
 
-              <button 
-                onClick={() => startRun('TUTORIAL')} 
-                className="w-full py-2.5 bg-gray-800/80 hover:bg-gray-700/80 text-emerald-400 hover:text-emerald-300 font-mono font-bold text-xs rounded-lg border border-gray-700 hover:border-emerald-500/50 flex items-center justify-center gap-2 transition-all mt-1"
-              >
-                <span>💡</span> HOW TO PLAY (BRIEFING)
-              </button>
             </div>
           )}
 
@@ -590,6 +883,24 @@ export default function GameManager() {
           <div className="text-xs font-bold font-mono bg-gray-900/90 border border-gray-700 px-3 py-1.5 rounded shadow text-blue-400">
             ⏱️ TIME: {formatTime(elapsedTime)}
           </div>
+          {currentMode === 'CAMPAIGN_REMIX' && (
+            <div className="text-xs font-mono bg-red-950/90 border border-red-500/80 px-3 py-1 rounded text-red-200 font-bold shadow flex items-center gap-1.5 pointer-events-auto">
+              <span>STRIKES:</span>
+              <span className="text-sm tracking-widest">
+                {'❤️'.repeat(remixLives)}{'🖤'.repeat(3 - remixLives)}
+              </span>
+            </div>
+          )}
+          {currentMode === 'CAMPAIGN_LESSON' && (
+            <div className="text-xs font-mono bg-cyan-950/90 border border-cyan-500/80 px-3 py-1 rounded text-cyan-200 font-bold shadow pointer-events-auto">
+              <span>🥋 DOJO PRACTICE • UNLIMITED HINTS</span>
+            </div>
+          )}
+          {currentMode === 'SRS_REVIEW' && (
+            <div className="text-xs font-mono bg-emerald-950/90 border border-emerald-500/80 px-3 py-1 rounded text-emerald-200 font-bold shadow pointer-events-auto">
+              <span>🧠 SPACED REPETITION REVIEW</span>
+            </div>
+          )}
           {currentMicrogame.id === 'tutorial-briefing' ? (
             <div className="text-xs font-mono bg-emerald-950/90 border border-emerald-600/80 px-3 py-1 rounded text-emerald-300 font-bold shadow">
               <span>⚡ SYSTEM ONBOARDING</span>
@@ -618,58 +929,142 @@ export default function GameManager() {
       )}
 
       {phase === 'VICTORY' && (
-        <div className="flex flex-col items-center justify-center z-50">
-          <h1 className="text-6xl md:text-8xl font-black uppercase text-center text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.8)] mb-4">
-            DECK CLEARED
-          </h1>
-          <p className="text-2xl text-gray-300 font-mono mb-6">Final Time: {formatTime(elapsedTime)}</p>
-          
-          <div className="bg-gray-900 border-2 border-gray-700 rounded-xl p-6 mb-8 w-full max-w-md shadow-2xl relative font-sans">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-gray-300 font-bold text-xs uppercase tracking-wider">Share your run</h3>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(generateWordleSnippet());
-                  setIsCopied(true);
-                  setTimeout(() => setIsCopied(false), 2000);
-                }}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                  isCopied
-                    ? 'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'
-                    : 'bg-blue-600 hover:bg-blue-500 text-white'
-                }`}
-              >
-                {isCopied ? 'COPIED! ✓' : 'COPY TO CLIPBOARD 📋'}
-              </button>
+        <div className="flex flex-col items-center justify-center z-50 text-center max-w-xl p-4">
+          {currentMode === 'CAMPAIGN_REMIX' ? (
+            <div className="flex flex-col items-center mb-6">
+              <div className="text-7xl mb-2 animate-bounce">
+                {remixEarnedMedal === 'GOLD' ? '🥇' : remixEarnedMedal === 'SILVER' ? '🥈' : '🥉'}
+              </div>
+              <h1 className="text-4xl md:text-6xl font-black uppercase text-yellow-400 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] mb-2">
+                {remixEarnedMedal} MEDAL!
+              </h1>
+              <p className="text-base text-emerald-400 font-mono font-bold">
+                ✓ Chapter Cleared! All chapter cards graduated to your Daily SRS Deck!
+              </p>
+              {unlockedNextChapterId && (
+                <div className="mt-3 px-4 py-2 rounded-xl bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)] animate-pulse">
+                  ⚡ NEXT CHAPTER UNLOCKED!
+                </div>
+              )}
             </div>
-            <textarea 
-              readOnly 
-              className="w-full h-44 bg-black border border-gray-700 text-gray-100 p-3.5 font-mono text-xs leading-relaxed resize-none rounded-xl focus:outline-none focus:border-green-500 select-all"
-              value={generateWordleSnippet()}
-              onClick={(e) => {
-                e.currentTarget.select();
-                navigator.clipboard.writeText(e.currentTarget.value);
-                setIsCopied(true);
-                setTimeout(() => setIsCopied(false), 2000);
-              }}
-            />
-            <p className="text-[11px] text-gray-500 mt-2 text-center">
-              Click anywhere on snippet or button above to copy
-            </p>
-          </div>
+          ) : currentMode === 'CAMPAIGN_LESSON' ? (
+            <div className="flex flex-col items-center mb-6">
+              <div className="text-6xl mb-2">🎯</div>
+              <h1 className="text-4xl md:text-5xl font-black uppercase text-emerald-400 drop-shadow-[0_0_20px_rgba(16,185,129,0.8)] mb-2">
+                LESSON COMPLETED!
+              </h1>
+              <p className="text-sm text-gray-300 font-mono max-w-md">
+                Technique verified and logged in your Dojo campaign.
+              </p>
+            </div>
+          ) : currentMode === 'SRS_REVIEW' ? (
+            <div className="flex flex-col items-center mb-6">
+              <div className="text-6xl mb-2">🧠</div>
+              <h1 className="text-4xl md:text-5xl font-black uppercase text-cyan-400 drop-shadow-[0_0_20px_rgba(6,182,212,0.8)] mb-2">
+                REVIEW COMPLETE!
+              </h1>
+              <p className="text-sm text-gray-300 font-mono max-w-md">
+                Memory retention intervals updated via Modified SM-2. Keep defending!
+              </p>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-6xl md:text-8xl font-black uppercase text-center text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.8)] mb-4">
+                DECK CLEARED
+              </h1>
+              <p className="text-2xl text-gray-300 font-mono mb-6">Final Time: {formatTime(elapsedTime)}</p>
+              
+              <div className="bg-gray-900 border-2 border-gray-700 rounded-xl p-6 mb-8 w-full max-w-md shadow-2xl relative font-sans text-left">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-gray-300 font-bold text-xs uppercase tracking-wider">Share your run</h3>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(generateWordleSnippet());
+                      setIsCopied(true);
+                      setTimeout(() => setIsCopied(false), 2000);
+                    }}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      isCopied
+                        ? 'bg-emerald-600 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                    }`}
+                  >
+                    {isCopied ? 'COPIED! ✓' : 'COPY TO CLIPBOARD 📋'}
+                  </button>
+                </div>
+                <textarea 
+                  readOnly 
+                  className="w-full h-44 bg-black border border-gray-700 text-gray-100 p-3.5 font-mono text-xs leading-relaxed resize-none rounded-xl focus:outline-none focus:border-green-500 select-all"
+                  value={generateWordleSnippet()}
+                  onClick={(e) => {
+                    e.currentTarget.select();
+                    navigator.clipboard.writeText(e.currentTarget.value);
+                    setIsCopied(true);
+                    setTimeout(() => setIsCopied(false), 2000);
+                  }}
+                />
+              </div>
+            </>
+          )}
 
           <div className="flex gap-4">
             <button 
-              onClick={() => setPhase('MAIN_MENU')}
-              className="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold font-mono text-xl rounded shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all"
+              onClick={() => {
+                setPhase('MAIN_MENU');
+                if (currentMode === 'CAMPAIGN_LESSON' || currentMode === 'CAMPAIGN_REMIX') {
+                  setIsCampaignOpen(true);
+                }
+              }}
+              className="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold font-mono text-lg rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.5)] transition-all"
             >
-              MAIN MENU
+              {currentMode.startsWith('CAMPAIGN') ? 'BACK TO DOJO 🥋' : 'MAIN MENU'}
             </button>
-            <button 
-              onClick={() => window.location.reload()}
-              className="px-8 py-3 bg-green-600 hover:bg-green-500 text-white font-bold font-mono text-xl rounded shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all"
+            {currentMode === 'CAMPAIGN_REMIX' && activeChapter && (
+              <button 
+                onClick={() => startRemix(activeChapter)}
+                className="px-8 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold font-mono text-lg rounded-xl shadow-[0_0_15px_rgba(234,88,12,0.5)] transition-all"
+              >
+                REPLAY REMIX 🔄
+              </button>
+            )}
+            {!currentMode.startsWith('CAMPAIGN') && (
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-8 py-3 bg-green-600 hover:bg-green-500 text-white font-bold font-mono text-xl rounded-xl shadow-[0_0_15px_rgba(34,197,94,0.5)] transition-all"
+              >
+                RESTART APP
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {phase === 'DEFEAT' && (
+        <div className="flex flex-col items-center justify-center z-50 p-6 text-center max-w-lg">
+          <div className="text-7xl mb-4 animate-bounce">💥</div>
+          <h1 className="text-4xl md:text-6xl font-black uppercase text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] mb-2 tracking-wider">
+            REMIX FAILED
+          </h1>
+          <p className="text-sm sm:text-base text-gray-300 font-mono mb-6 leading-relaxed">
+            Red team breached your defenses! All 3 strikes were triggered during the Chapter Remix.
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                if (activeChapter) startRemix(activeChapter);
+              }}
+              className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-bold font-mono text-base rounded-xl shadow-[0_0_15px_rgba(239,68,68,0.5)] transition-all"
             >
-              RESTART APP
+              RETRY REMIX 🔄
+            </button>
+            <button
+              onClick={() => {
+                setPhase('MAIN_MENU');
+                setIsCampaignOpen(true);
+              }}
+              className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold font-mono text-base rounded-xl transition-all"
+            >
+              RETURN TO DOJO 🥋
             </button>
           </div>
         </div>
@@ -786,18 +1181,42 @@ export default function GameManager() {
                     )}
                   </div>
 
-                  {/* Right: Tutorial Hint */}
-                  {activeStage.hint && (
-                    <div className="bg-black/90 border border-blue-500 text-blue-400 px-3 py-1 rounded-lg text-xs font-mono tracking-wide shadow-[0_0_10px_rgba(59,130,246,0.4)]">
-                      <span className="text-blue-300 font-bold mr-1">TUTORIAL:</span>
-                      {activeStage.hint.split(' then ').map((part: string, i: number, arr: string[]) => (
-                        <React.Fragment key={i}>
-                          {part}
-                          {i < arr.length - 1 && <span className="text-pink-500 font-bold mx-2">THEN</span>}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  )}
+                  {/* Right: Interactive Two-Tier Hint System */}
+                  <div className="flex items-center gap-2">
+                    {hintTier === 0 ? (
+                      <button
+                        onClick={triggerHint}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 shadow-md ${
+                          currentMode === 'CAMPAIGN_LESSON'
+                            ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                            : 'bg-yellow-950/80 hover:bg-yellow-900 border border-yellow-500/50 text-yellow-300'
+                        }`}
+                        title="Click or press 'H' for hint"
+                      >
+                        <span>💡</span>
+                        <span>{currentMode === 'CAMPAIGN_LESSON' ? 'GET HINT' : 'HINT (H)'}</span>
+                      </button>
+                    ) : hintTier === 1 ? (
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1 rounded-lg bg-cyan-950/90 border border-cyan-400 text-cyan-200 text-xs font-mono shadow-[0_0_12px_rgba(34,211,238,0.3)] animate-pulse">
+                          <span className="text-cyan-400 font-bold mr-1">💡 NUDGE:</span>
+                          {activeStage.hintNudge || activeStage.hint || 'Carefully inspect the parameters on screen.'}
+                        </div>
+                        <button
+                          onClick={triggerHint}
+                          className="px-2.5 py-1 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-500/60 text-amber-300 text-xs font-mono font-bold transition-all flex items-center gap-1"
+                          title="Reveal exact solution"
+                        >
+                          <span>🎯 Solution</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="px-3 py-1 rounded-lg bg-amber-950/90 border border-amber-400 text-amber-200 text-xs font-mono shadow-[0_0_12px_rgba(251,191,36,0.3)]">
+                        <span className="text-amber-400 font-bold mr-1">🎯 SOLUTION:</span>
+                        {activeStage.hintSolution || activeStage.hint || getCorrectAnswerText(currentMicrogame)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -895,6 +1314,27 @@ export default function GameManager() {
         <BugReportModal
           isOpen={isBugReportOpen}
           onClose={() => setIsBugReportOpen(false)}
+        />
+      )}
+
+      {/* Story Campaign & Dojo Modal */}
+      {isCampaignOpen && (
+        <CampaignModal
+          isOpen={isCampaignOpen}
+          onClose={() => setIsCampaignOpen(false)}
+          onStartLesson={startLesson}
+          onStartRemix={startRemix}
+        />
+      )}
+
+      {/* AI Deck Studio Modal */}
+      {isStudioOpen && (
+        <AiDeckStudioModal
+          isOpen={isStudioOpen}
+          onClose={() => setIsStudioOpen(false)}
+          onDecksUpdated={() => {
+            refreshSRSCounts();
+          }}
         />
       )}
     </div>
